@@ -26,6 +26,7 @@ private:
 
     Camera3D* m_camera = nullptr;
     MeshInstance3D* m_car_mesh = nullptr;
+    Node3D* m_gizmo_root = nullptr;
     Label* m_lbl_status = nullptr;
     Button* m_btn_ctrl = nullptr;
 
@@ -37,9 +38,20 @@ private:
     Vector2 m_touch_start_pos;
     float m_total_drag_dist = 0.0f;
 
+    // متغيرات الجزمو الديناميكي
+    Vector3 m_gizmo_pos = Vector3(0, 0, 0);
+    int m_active_gizmo_axis = -1; // -1: لا شيء، 0: X (أحمر)، 1: Y (أخضر)، 2: Z (أزرق)
+    bool m_is_dragging_gizmo = false;
+    Vector3 m_gizmo_prev_hit;
+
     void update_camera_transform();
     void rebuild_render_mesh();
+    void setup_gizmo_nodes();
+    void update_gizmo();
+
     FaceId pick_face_at_screen_pos(const Vector2& screen_pos);
+    int pick_gizmo_axis(const Vector2& screen_pos);
+    Vector3 get_ray_plane_intersection(const Vector3& ray_origin, const Vector3& ray_dir, const Vector3& plane_point, const Vector3& plane_normal);
 
 protected:
     static void _bind_methods();
