@@ -1,6 +1,6 @@
 import os
 
-env = SConscript("godot-cpp/SConstruct")
+env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
 
 env.Append(CXXFLAGS=["-std=c++20", "-O3", "-fexceptions"])
 env.Append(CCFLAGS=["-O3", "-fexceptions"])
