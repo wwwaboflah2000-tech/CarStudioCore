@@ -17,7 +17,7 @@ class CarModeler : public Node3D {
 
 private:
     BMesh m_bmesh;
-    int m_mode = 2;
+    int m_mode = 2; // 0: Vertex, 1: Edge, 2: Face, 3: Object
     bool m_ctrl_active = false;
 
     std::set<VertId> m_selected_verts;
@@ -29,13 +29,17 @@ private:
     Label* m_lbl_status = nullptr;
     Button* m_btn_ctrl = nullptr;
 
+    // تتبع الكاميرا واللمس
     float m_cam_dist = 4.5f;
     float m_cam_pitch = -0.35f;
     float m_cam_yaw = 0.5f;
-    bool m_is_orbiting = false;
+    bool m_is_touching = false;
+    Vector2 m_touch_start_pos;
+    float m_total_drag_dist = 0.0f;
 
     void update_camera_transform();
     void rebuild_render_mesh();
+    FaceId pick_face_at_screen_pos(const Vector2& screen_pos);
 
 protected:
     static void _bind_methods();
