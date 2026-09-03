@@ -15,8 +15,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,6 +29,13 @@ jobs:
         with:
           ndk-version: ${{ env.NDK_VERSION }}
 
+      - name: Fetch godot-cpp (Master for 4.8)
+        run: |
+          if [ ! -d "godot-cpp/src" ]; then
+            echo "📥 جاري استنساخ godot-cpp فرع master..."
+            git clone --depth 1 -b master https://github.com/godotengine/godot-cpp.git godot-cpp
+          fi
+
       - name: Cache godot-cpp
         id: cache-godot-cpp
         uses: actions/cache@v4
@@ -39,7 +44,7 @@ jobs:
             godot-cpp/bin
             godot-cpp/gen
             godot-cpp/include/godot_cpp/gen
-          key: godot-cpp-android-arm64-v48-${{ hashFiles('godot-cpp/**') }}
+          key: godot-cpp-android-arm64-v48-cache
 
       - name: Build godot-cpp (Once)
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
