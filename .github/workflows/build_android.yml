@@ -1,0 +1,59 @@
+name: Build Android ARM64
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  NDK_VERSION: "26.3.11579264"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SCons
+        run: pip install scons
+
+      - name: Setup Android NDK
+        uses: nvm-sh/setup-android@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+
+      - name: Cache godot-cpp
+        id: cache-godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: |
+            godot-cpp/bin
+            godot-cpp/gen
+            godot-cpp/include/godot_cpp/gen
+          key: godot-cpp-android-arm64-v48-${{ hashFiles('godot-cpp/**') }}
+
+      - name: Build godot-cpp (Once)
+        if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
+        run: |
+          cd godot-cpp
+          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+          cd ..
+
+      - name: Compile C++ Core
+        run: |
+          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+
+      - name: Upload Library
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcarstudio-android-arm64
+          path: bin/android/*.so
