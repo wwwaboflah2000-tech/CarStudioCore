@@ -10,7 +10,6 @@
 
 namespace godot {
 
-// خوارزميات الالتقاط الرياضية
 static bool ray_triangle_intersect(const Vector3& orig, const Vector3& dir,
                                    const Vector3& v0, const Vector3& v1, const Vector3& v2,
                                    float& t) {
@@ -77,7 +76,6 @@ void CarModeler::_ready() {
     m_lbl_status = get_node<Label>("UI/BottomToast/LblStatus");
     m_btn_ctrl = get_node<Button>("UI/BtnCtrl");
 
-    // إنشاء عقدة الجزمو تلقائياً إن لم تكن موجودة في المشهد
     m_gizmo_root = Object::cast_to<Node3D>(find_child("GizmoRoot", false, false));
     if (!m_gizmo_root) {
         m_gizmo_root = memnew(Node3D);
@@ -85,7 +83,6 @@ void CarModeler::_ready() {
         add_child(m_gizmo_root);
     }
 
-    // إنشاء طبقة إظهار النقاط والحواف (Overlay Mesh)
     m_overlay_mesh = Object::cast_to<MeshInstance3D>(find_child("OverlayMesh", false, false));
     if (!m_overlay_mesh) {
         m_overlay_mesh = memnew(MeshInstance3D);
@@ -97,13 +94,13 @@ void CarModeler::_ready() {
     update_camera_transform();
 
     m_bmesh.create_cube(1.5f);
-    m_selected_faces.insert(4); // تحديد الوجه العلوي افتراضياً
+    m_selected_faces.insert(4);
     
     rebuild_render_mesh();
     update_gizmo();
 
     if (m_lbl_status) {
-        m_lbl_status->set_text("🟢 تم تفعيل التحديد المتعدد والجزمو ثلاثي المحاور");
+        m_lbl_status->set_text("🟢 BMesh جاهز: اسحب المحاور للتحريك");
     }
 }
 
@@ -149,9 +146,9 @@ void CarModeler::setup_gizmo_nodes() {
         m_gizmo_root->add_child(mi_c);
     };
 
-    make_axis(Vector3(1, 0, 0), Color(0.95f, 0.2f, 0.2f), Vector3(0, 0, -90)); // X أحمر
-    make_axis(Vector3(0, 1, 0), Color(0.2f, 0.9f, 0.2f), Vector3(0, 0, 0));    // Y أخضر
-    make_axis(Vector3(0, 0, 1), Color(0.2f, 0.4f, 0.95f), Vector3(90, 0, 0));   // Z أزرق
+    make_axis(Vector3(1, 0, 0), Color(0.95f, 0.2f, 0.2f), Vector3(0, 0, -90));
+    make_axis(Vector3(0, 1, 0), Color(0.2f, 0.9f, 0.2f), Vector3(0, 0, 0));
+    make_axis(Vector3(0, 0, 1), Color(0.2f, 0.4f, 0.95f), Vector3(90, 0, 0));
 }
 
 void CarModeler::update_camera_transform() {
@@ -244,7 +241,7 @@ VertId CarModeler::pick_vertex_at_screen_pos(const Vector2& screen_pos) {
     Vector3 ray_dir = m_camera->project_ray_normal(screen_pos).normalized();
 
     VertId best_v = -1;
-    float min_dist = 0.25f; // منطقة لمس مريحة للشاشة
+    float min_dist = 0.25f;
     for (const auto& v : m_bmesh.verts) {
         if (v.deleted) continue;
         float d = dist_ray_to_point(ray_from, ray_dir, v.co);
@@ -329,7 +326,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
 
             if (m_total_drag_dist < 12.0f) {
                 if (m_mode == 0) {
-                    // تحديد النقاط
                     VertId hit_v = pick_vertex_at_screen_pos(touch->get_position());
                     if (hit_v != -1) {
                         if (m_ctrl_active) {
@@ -343,7 +339,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
                         m_selected_verts.clear();
                     }
                 } else if (m_mode == 1) {
-                    // تحديد الحواف
                     EdgeId hit_e = pick_edge_at_screen_pos(touch->get_position());
                     if (hit_e != -1) {
                         if (m_ctrl_active) {
@@ -357,7 +352,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
                         m_selected_edges.clear();
                     }
                 } else if (m_mode == 2) {
-                    // تحديد الأوجه
                     FaceId hit_f = pick_face_at_screen_pos(touch->get_position());
                     if (hit_f != -1) {
                         if (m_ctrl_active) {
@@ -382,7 +376,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
     if (drag.is_valid() && m_is_touching) {
         m_total_drag_dist += drag->get_relative().length();
 
-        // 1. تحريك العناصر عبر سحب الجزمو
         if (m_is_dragging_gizmo && m_active_gizmo_axis != -1) {
             Vector3 cam_fwd = -m_camera->get_global_transform().basis.get_column(2).normalized();
             Vector3 ray_from = m_camera->project_ray_origin(drag->get_position());
@@ -420,7 +413,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             return;
         }
 
-        // 2. تدوير الكاميرا
         Vector2 rel = drag->get_relative();
         m_cam_yaw -= rel.x * 0.005f;
         m_cam_pitch = std::clamp(m_cam_pitch - rel.y * 0.005f, -1.4f, 1.4f);
@@ -484,7 +476,6 @@ void CarModeler::_on_btn_delete_pressed() {
 void CarModeler::rebuild_render_mesh() {
     if (!m_car_mesh) return;
 
-    // 1. رسم مجسم الأوجه والشيدر
     Ref<SurfaceTool> st;
     st.instantiate();
     st->begin(Mesh::PRIMITIVE_TRIANGLES);
@@ -517,4 +508,20 @@ void CarModeler::rebuild_render_mesh() {
         } else {
             for (size_t j = 1; j < pts.size() - 1; ++j) {
                 st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(0, 0)); st->add_vertex(pts[0]);
-                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(1, 0)); st->add_vert
+                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(1, 0)); st->add_vertex(pts[j]);
+                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(0.5, 1)); st->add_vertex(pts[j + 1]);
+            }
+        }
+    }
+    m_car_mesh->set_mesh(st->commit());
+
+    if (!m_overlay_mesh) return;
+
+    Ref<SurfaceTool> st_ov;
+    st_ov.instantiate();
+    st_ov->begin(Mesh::PRIMITIVE_LINES);
+
+    Ref<StandardMaterial3D> ov_mat;
+    ov_mat.instantiate();
+    ov_mat->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+    o
