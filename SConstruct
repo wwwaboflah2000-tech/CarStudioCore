@@ -2,6 +2,9 @@ import os
 
 env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
 
+# تفعيل كاش البصمة الرقمية لمترجم SCons
+CacheDir(".scons_cache")
+
 env.Append(CXXFLAGS=["-std=c++20", "-O3", "-fexceptions"])
 env.Append(CCFLAGS=["-O3", "-fexceptions"])
 env.Append(CPPPATH=["#src/", "src/", "#"])
