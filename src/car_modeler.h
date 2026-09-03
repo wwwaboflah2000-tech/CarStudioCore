@@ -26,6 +26,7 @@ private:
 
     Camera3D* m_camera = nullptr;
     MeshInstance3D* m_car_mesh = nullptr;
+    MeshInstance3D* m_overlay_mesh = nullptr; // طبقة إظهار النقاط والحواف المحددة
     Node3D* m_gizmo_root = nullptr;
     Label* m_lbl_status = nullptr;
     Button* m_btn_ctrl = nullptr;
@@ -40,7 +41,7 @@ private:
 
     // متغيرات الجزمو الديناميكي
     Vector3 m_gizmo_pos = Vector3(0, 0, 0);
-    int m_active_gizmo_axis = -1; // -1: لا شيء، 0: X (أحمر)، 1: Y (أخضر)، 2: Z (أزرق)
+    int m_active_gizmo_axis = -1;
     bool m_is_dragging_gizmo = false;
     Vector3 m_gizmo_prev_hit;
 
@@ -49,8 +50,11 @@ private:
     void setup_gizmo_nodes();
     void update_gizmo();
 
+    VertId pick_vertex_at_screen_pos(const Vector2& screen_pos);
+    EdgeId pick_edge_at_screen_pos(const Vector2& screen_pos);
     FaceId pick_face_at_screen_pos(const Vector2& screen_pos);
     int pick_gizmo_axis(const Vector2& screen_pos);
+
     Vector3 get_ray_plane_intersection(const Vector3& ray_origin, const Vector3& ray_dir, const Vector3& plane_point, const Vector3& plane_normal);
 
 protected:
