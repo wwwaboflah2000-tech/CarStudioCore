@@ -31,40 +31,34 @@ jobs:
           ndk-version: ${{ env.NDK_VERSION }}
           link-to-sdk: true
 
-      - name: Link NDK to Exact Godot 4.8 Path
+      - name: Link NDK Path
         run: |
           NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
-          echo "NDK Path is: $NDK_PATH"
           sudo mkdir -p /usr/local/lib/android/sdk/ndk
           sudo ln -sfn "$NDK_PATH" /usr/local/lib/android/sdk/ndk/28.1.13356709
           echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/28.1.13356709" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/28.1.13356709" >> $GITHUB_ENV
 
-      - name: Fetch godot-cpp (Master for 4.8)
+      - name: Fetch godot-cpp
         run: |
           if [ ! -d "godot-cpp/src" ]; then
-            echo "📥 جاري استنساخ godot-cpp..."
             git clone --depth 1 -b master https://github.com/godotengine/godot-cpp.git godot-cpp
           fi
 
-      - name: Cache godot-cpp
-        id: cache-godot-cpp
+      # كاش SCons الشامل الذكي
+      - name: Cache SCons Objects
+        id: cache-scons
         uses: actions/cache@v4
         with:
           path: |
+            .scons_cache
             godot-cpp/bin
             godot-cpp/gen
-            godot-cpp/include/godot_cpp/gen
-          key: godot-cpp-android-arm64-v47-r28b-cache
+          key: scons-arm64-v47-cache-${{ github.sha }}
+          restore-keys: |
+            scons-arm64-v47-cache-
 
-      - name: Build godot-cpp (Once)
-        if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
-        run: |
-          cd godot-cpp
-          scons platform=android target=template_debug arch=arm64 api_version=4.7 -j$(nproc)
-          cd ..
-
-      - name: Compile C++ Core
+      - name: Build Library
         run: |
           scons platform=android target=template_debug arch=arm64 api_version=4.7 -j$(nproc)
 
