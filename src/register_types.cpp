@@ -104,7 +104,7 @@ void CarModeler::setup_gizmo_nodes() {
         mat.instantiate();
         mat->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
         mat->set_albedo(col);
-        mat->set_flag(BaseMaterial3D::FLAG_DISABLE_DEPTH_TEST, true); // يظهر دائماً في المقدمة كبلندر
+        mat->set_flag(BaseMaterial3D::FLAG_DISABLE_DEPTH_TEST, true);
         mat->set_render_priority(20);
 
         MeshInstance3D* mi = memnew(MeshInstance3D);
@@ -114,7 +114,6 @@ void CarModeler::setup_gizmo_nodes() {
         mi->set_rotation_degrees(rot_deg);
         m_gizmo_root->add_child(mi);
 
-        // رأس السهم المخروطي
         Ref<CylinderMesh> cone;
         cone.instantiate();
         cone->set_top_radius(0.0f);
@@ -151,7 +150,6 @@ void CarModeler::update_gizmo() {
         return;
     }
 
-    // حساب مركز ثقل التحديد (Median Pivot)
     Vector3 center(0, 0, 0);
     int count = 0;
     std::set<VertId> unique_verts;
@@ -174,7 +172,6 @@ void CarModeler::update_gizmo() {
         m_gizmo_pos = center / (float)count;
         m_gizmo_root->set_global_position(m_gizmo_pos);
 
-        // مقياس ديناميكي متكيف مع بعد الكاميرا
         float s = std::clamp(m_cam_dist * 0.16f, 0.3f, 2.5f);
         m_gizmo_root->set_scale(Vector3(s, s, s));
         m_gizmo_root->set_visible(true);
@@ -202,7 +199,7 @@ int CarModeler::pick_gizmo_axis(const Vector2& screen_pos) {
     Vector3 axes[3] = { Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1) };
     
     int best_axis = -1;
-    float min_dist = 0.18f * s; // منطقة سماح لمس مريحة للشاشة
+    float min_dist = 0.18f * s;
 
     for (int i = 0; i < 3; ++i) {
         Vector3 p0 = m_gizmo_pos;
@@ -271,7 +268,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             m_is_dragging_gizmo = false;
             m_active_gizmo_axis = -1;
 
-            // نقرة سريعة على مجسم (تحديد أو إلغاء)
             if (m_total_drag_dist < 12.0f) {
                 FaceId hit_face = pick_face_at_screen_pos(touch->get_position());
                 if (hit_face != -1) {
@@ -300,7 +296,7 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
     if (drag.is_valid() && m_is_touching) {
         m_total_drag_dist += drag->get_relative().length();
 
-        // 1. تحريك الجزمو وسحب الوجه في الفضاء
+        // 1. سحب الجزمو وتحريك الوجه
         if (m_is_dragging_gizmo && m_active_gizmo_axis != -1) {
             Vector3 cam_fwd = -m_camera->get_global_transform().basis.get_column(2).normalized();
             Vector3 ray_from = m_camera->project_ray_origin(drag->get_position());
@@ -311,7 +307,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             Vector3 axis_dir = (m_active_gizmo_axis == 0 ? Vector3(1,0,0) : (m_active_gizmo_axis == 1 ? Vector3(0,1,0) : Vector3(0,0,1)));
             Vector3 move_vec = axis_dir * world_delta.dot(axis_dir);
 
-            // تحريك كل رؤوس الأوجه المحددة
             std::set<VertId> unique_verts;
             for (FaceId fid : m_selected_faces) {
                 if (fid < 0 || fid >= (int)m_bmesh.faces.size() || m_bmesh.faces[fid].deleted) continue;
@@ -332,7 +327,7 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             return;
         }
 
-        // 2. تدوير الكاميرا حول المجسم إذا لم نكن نسحب الجزمو
+        // 2. تدوير الكاميرا
         Vector2 rel = drag->get_relative();
         m_cam_yaw -= rel.x * 0.005f;
         m_cam_pitch = std::clamp(m_cam_pitch - rel.y * 0.005f, -1.4f, 1.4f);
@@ -414,7 +409,6 @@ void CarModeler::rebuild_render_mesh() {
         }
 
         if (f.len == 4) {
-            // رسم رباعي نظيف دون خطوط وترية وهمية
             Vector3 v0 = pts[0], v1 = pts[1], v2 = pts[2], v3 = pts[3];
 
             st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(0, 0)); st->add_vertex(v0);
