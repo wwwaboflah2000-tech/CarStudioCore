@@ -55,18 +55,18 @@ jobs:
             godot-cpp/bin
             godot-cpp/gen
             godot-cpp/include/godot_cpp/gen
-          key: godot-cpp-android-arm64-v48-r28b-cache
+          key: godot-cpp-android-arm64-v47-r28b-cache
 
       - name: Build godot-cpp (Once)
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
         run: |
           cd godot-cpp
-          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 api_version=4.7 -j$(nproc)
           cd ..
 
       - name: Compile C++ Core
         run: |
-          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 api_version=4.7 -j$(nproc)
 
       - name: Upload Library
         uses: actions/upload-artifact@v4
