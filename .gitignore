@@ -1,0 +1,14 @@
+*.o
+*.os
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+.sconsign.dblite
+.scons_cache/
+project/.godot/
+project/bin/
+.vscode/
+.idea/
