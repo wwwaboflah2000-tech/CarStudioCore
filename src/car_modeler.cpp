@@ -10,7 +10,7 @@
 
 namespace godot {
 
-// خوارزمية Möller–Trumbore الدقيقة لفحص تقاطع شعاع الكاميرا مع الأوجه
+// خوارزميات الالتقاط الرياضية
 static bool ray_triangle_intersect(const Vector3& orig, const Vector3& dir,
                                    const Vector3& v0, const Vector3& v1, const Vector3& v2,
                                    float& t) {
@@ -30,7 +30,14 @@ static bool ray_triangle_intersect(const Vector3& orig, const Vector3& dir,
     return (t > 1e-3f);
 }
 
-// مسافة فراغية بين شعاع وقطعة مستقيمة لالتقاط محاور الجزمو بدقة
+static float dist_ray_to_point(const Vector3& ro, const Vector3& rd, const Vector3& pt) {
+    Vector3 w = pt - ro;
+    float c1 = w.dot(rd);
+    if (c1 <= 0.0f) return (pt - ro).length();
+    Vector3 proj = ro + rd * c1;
+    return (pt - proj).length();
+}
+
 static float dist_ray_to_segment(const Vector3& ro, const Vector3& rd, const Vector3& p0, const Vector3& p1) {
     Vector3 u = rd;
     Vector3 v = p1 - p0;
@@ -67,9 +74,24 @@ CarModeler::~CarModeler() {}
 void CarModeler::_ready() {
     m_camera = get_node<Camera3D>("Camera3D");
     m_car_mesh = get_node<MeshInstance3D>("CarMesh");
-    m_gizmo_root = get_node<Node3D>("GizmoRoot");
     m_lbl_status = get_node<Label>("UI/BottomToast/LblStatus");
     m_btn_ctrl = get_node<Button>("UI/BtnCtrl");
+
+    // إنشاء عقدة الجزمو تلقائياً إن لم تكن موجودة في المشهد
+    m_gizmo_root = Object::cast_to<Node3D>(find_child("GizmoRoot", false, false));
+    if (!m_gizmo_root) {
+        m_gizmo_root = memnew(Node3D);
+        m_gizmo_root->set_name("GizmoRoot");
+        add_child(m_gizmo_root);
+    }
+
+    // إنشاء طبقة إظهار النقاط والحواف (Overlay Mesh)
+    m_overlay_mesh = Object::cast_to<MeshInstance3D>(find_child("OverlayMesh", false, false));
+    if (!m_overlay_mesh) {
+        m_overlay_mesh = memnew(MeshInstance3D);
+        m_overlay_mesh->set_name("OverlayMesh");
+        add_child(m_overlay_mesh);
+    }
 
     setup_gizmo_nodes();
     update_camera_transform();
@@ -81,11 +103,10 @@ void CarModeler::_ready() {
     update_gizmo();
 
     if (m_lbl_status) {
-        m_lbl_status->set_text("🟢 BMesh جاهز: اسحب المحاور لتحريك الوجه");
+        m_lbl_status->set_text("🟢 تم تفعيل التحديد المتعدد والجزمو ثلاثي المحاور");
     }
 }
 
-// بناء محاور الجزمو الثلاثة (أحمر، أخضر، أزرق)
 void CarModeler::setup_gizmo_nodes() {
     if (!m_gizmo_root) return;
 
@@ -96,8 +117,8 @@ void CarModeler::setup_gizmo_nodes() {
     auto make_axis = [this](const Vector3& dir, const Color& col, const Vector3& rot_deg) {
         Ref<CylinderMesh> shaft;
         shaft.instantiate();
-        shaft->set_top_radius(0.02f);
-        shaft->set_bottom_radius(0.02f);
+        shaft->set_top_radius(0.025f);
+        shaft->set_bottom_radius(0.025f);
         shaft->set_height(0.6f);
 
         Ref<StandardMaterial3D> mat;
@@ -105,7 +126,7 @@ void CarModeler::setup_gizmo_nodes() {
         mat->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
         mat->set_albedo(col);
         mat->set_flag(BaseMaterial3D::FLAG_DISABLE_DEPTH_TEST, true);
-        mat->set_render_priority(20);
+        mat->set_render_priority(25);
 
         MeshInstance3D* mi = memnew(MeshInstance3D);
         mi->set_mesh(shaft);
@@ -117,13 +138,13 @@ void CarModeler::setup_gizmo_nodes() {
         Ref<CylinderMesh> cone;
         cone.instantiate();
         cone->set_top_radius(0.0f);
-        cone->set_bottom_radius(0.06f);
-        cone->set_height(0.18f);
+        cone->set_bottom_radius(0.07f);
+        cone->set_height(0.2f);
 
         MeshInstance3D* mi_c = memnew(MeshInstance3D);
         mi_c->set_mesh(cone);
         mi_c->set_material_override(mat);
-        mi_c->set_position(dir * 0.65f);
+        mi_c->set_position(dir * 0.68f);
         mi_c->set_rotation_degrees(rot_deg);
         m_gizmo_root->add_child(mi_c);
     };
@@ -145,39 +166,43 @@ void CarModeler::update_camera_transform() {
 void CarModeler::update_gizmo() {
     if (!m_gizmo_root) return;
 
-    if (m_selected_faces.empty() && m_selected_verts.empty() && m_selected_edges.empty()) {
+    std::set<VertId> active_verts;
+    if (m_mode == 0) {
+        active_verts = m_selected_verts;
+    } else if (m_mode == 1) {
+        for (EdgeId eid : m_selected_edges) {
+            if (eid >= 0 && eid < (int)m_bmesh.edges.size() && !m_bmesh.edges[eid].deleted) {
+                active_verts.insert(m_bmesh.edges[eid].v1);
+                active_verts.insert(m_bmesh.edges[eid].v2);
+            }
+        }
+    } else if (m_mode == 2) {
+        for (FaceId fid : m_selected_faces) {
+            if (fid >= 0 && fid < (int)m_bmesh.faces.size() && !m_bmesh.faces[fid].deleted) {
+                LoopId cur = m_bmesh.faces[fid].l_first;
+                for (int i = 0; i < m_bmesh.faces[fid].len; ++i) {
+                    active_verts.insert(m_bmesh.loops[cur].v);
+                    cur = m_bmesh.loops[cur].next;
+                }
+            }
+        }
+    }
+
+    if (active_verts.empty()) {
         m_gizmo_root->set_visible(false);
         return;
     }
 
     Vector3 center(0, 0, 0);
-    int count = 0;
-    std::set<VertId> unique_verts;
-
-    for (FaceId fid : m_selected_faces) {
-        if (fid < 0 || fid >= (int)m_bmesh.faces.size() || m_bmesh.faces[fid].deleted) continue;
-        LoopId cur = m_bmesh.faces[fid].l_first;
-        for (int i = 0; i < m_bmesh.faces[fid].len; ++i) {
-            unique_verts.insert(m_bmesh.loops[cur].v);
-            cur = m_bmesh.loops[cur].next;
-        }
-    }
-
-    for (VertId vid : unique_verts) {
+    for (VertId vid : active_verts) {
         center += m_bmesh.verts[vid].co;
-        count++;
     }
+    m_gizmo_pos = center / (float)active_verts.size();
+    m_gizmo_root->set_global_position(m_gizmo_pos);
 
-    if (count > 0) {
-        m_gizmo_pos = center / (float)count;
-        m_gizmo_root->set_global_position(m_gizmo_pos);
-
-        float s = std::clamp(m_cam_dist * 0.16f, 0.3f, 2.5f);
-        m_gizmo_root->set_scale(Vector3(s, s, s));
-        m_gizmo_root->set_visible(true);
-    } else {
-        m_gizmo_root->set_visible(false);
-    }
+    float s = std::clamp(m_cam_dist * 0.16f, 0.35f, 2.5f);
+    m_gizmo_root->set_scale(Vector3(s, s, s));
+    m_gizmo_root->set_visible(true);
 }
 
 Vector3 CarModeler::get_ray_plane_intersection(const Vector3& ray_origin, const Vector3& ray_dir, const Vector3& plane_point, const Vector3& plane_normal) {
@@ -199,7 +224,7 @@ int CarModeler::pick_gizmo_axis(const Vector2& screen_pos) {
     Vector3 axes[3] = { Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1) };
     
     int best_axis = -1;
-    float min_dist = 0.18f * s;
+    float min_dist = 0.22f * s;
 
     for (int i = 0; i < 3; ++i) {
         Vector3 p0 = m_gizmo_pos;
@@ -213,9 +238,44 @@ int CarModeler::pick_gizmo_axis(const Vector2& screen_pos) {
     return best_axis;
 }
 
+VertId CarModeler::pick_vertex_at_screen_pos(const Vector2& screen_pos) {
+    if (!m_camera) return -1;
+    Vector3 ray_from = m_camera->project_ray_origin(screen_pos);
+    Vector3 ray_dir = m_camera->project_ray_normal(screen_pos).normalized();
+
+    VertId best_v = -1;
+    float min_dist = 0.25f; // منطقة لمس مريحة للشاشة
+    for (const auto& v : m_bmesh.verts) {
+        if (v.deleted) continue;
+        float d = dist_ray_to_point(ray_from, ray_dir, v.co);
+        if (d < min_dist) {
+            min_dist = d;
+            best_v = v.id;
+        }
+    }
+    return best_v;
+}
+
+EdgeId CarModeler::pick_edge_at_screen_pos(const Vector2& screen_pos) {
+    if (!m_camera) return -1;
+    Vector3 ray_from = m_camera->project_ray_origin(screen_pos);
+    Vector3 ray_dir = m_camera->project_ray_normal(screen_pos).normalized();
+
+    EdgeId best_e = -1;
+    float min_dist = 0.20f;
+    for (const auto& e : m_bmesh.edges) {
+        if (e.deleted) continue;
+        float d = dist_ray_to_segment(ray_from, ray_dir, m_bmesh.verts[e.v1].co, m_bmesh.verts[e.v2].co);
+        if (d < min_dist) {
+            min_dist = d;
+            best_e = e.id;
+        }
+    }
+    return best_e;
+}
+
 FaceId CarModeler::pick_face_at_screen_pos(const Vector2& screen_pos) {
     if (!m_camera) return -1;
-
     Vector3 ray_from = m_camera->project_ray_origin(screen_pos);
     Vector3 ray_dir = m_camera->project_ray_normal(screen_pos).normalized();
 
@@ -253,7 +313,6 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             m_touch_start_pos = touch->get_position();
             m_total_drag_dist = 0.0f;
 
-            // فحص إذا لمس المستخدم أحد محاور الجزمو
             int axis = pick_gizmo_axis(touch->get_position());
             if (axis != -1) {
                 m_active_gizmo_axis = axis;
@@ -269,24 +328,51 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             m_active_gizmo_axis = -1;
 
             if (m_total_drag_dist < 12.0f) {
-                FaceId hit_face = pick_face_at_screen_pos(touch->get_position());
-                if (hit_face != -1) {
-                    if (m_ctrl_active) {
-                        if (m_selected_faces.count(hit_face)) m_selected_faces.erase(hit_face);
-                        else m_selected_faces.insert(hit_face);
-                    } else {
-                        m_selected_faces.clear();
-                        m_selected_faces.insert(hit_face);
+                if (m_mode == 0) {
+                    // تحديد النقاط
+                    VertId hit_v = pick_vertex_at_screen_pos(touch->get_position());
+                    if (hit_v != -1) {
+                        if (m_ctrl_active) {
+                            if (m_selected_verts.count(hit_v)) m_selected_verts.erase(hit_v);
+                            else m_selected_verts.insert(hit_v);
+                        } else {
+                            m_selected_verts.clear();
+                            m_selected_verts.insert(hit_v);
+                        }
+                    } else if (!m_ctrl_active) {
+                        m_selected_verts.clear();
                     }
-                    rebuild_render_mesh();
-                    update_gizmo();
-                    if (m_lbl_status) m_lbl_status->set_text("🎯 تم تحديد الوجه: " + String::num_int64(hit_face));
-                } else if (!m_ctrl_active) {
-                    m_selected_faces.clear();
-                    rebuild_render_mesh();
-                    update_gizmo();
-                    if (m_lbl_status) m_lbl_status->set_text("تم إلغاء التحديد");
+                } else if (m_mode == 1) {
+                    // تحديد الحواف
+                    EdgeId hit_e = pick_edge_at_screen_pos(touch->get_position());
+                    if (hit_e != -1) {
+                        if (m_ctrl_active) {
+                            if (m_selected_edges.count(hit_e)) m_selected_edges.erase(hit_e);
+                            else m_selected_edges.insert(hit_e);
+                        } else {
+                            m_selected_edges.clear();
+                            m_selected_edges.insert(hit_e);
+                        }
+                    } else if (!m_ctrl_active) {
+                        m_selected_edges.clear();
+                    }
+                } else if (m_mode == 2) {
+                    // تحديد الأوجه
+                    FaceId hit_f = pick_face_at_screen_pos(touch->get_position());
+                    if (hit_f != -1) {
+                        if (m_ctrl_active) {
+                            if (m_selected_faces.count(hit_f)) m_selected_faces.erase(hit_f);
+                            else m_selected_faces.insert(hit_f);
+                        } else {
+                            m_selected_faces.clear();
+                            m_selected_faces.insert(hit_f);
+                        }
+                    } else if (!m_ctrl_active) {
+                        m_selected_faces.clear();
+                    }
                 }
+                rebuild_render_mesh();
+                update_gizmo();
             }
         }
         return;
@@ -296,7 +382,7 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
     if (drag.is_valid() && m_is_touching) {
         m_total_drag_dist += drag->get_relative().length();
 
-        // 1. سحب الجزمو وتحريك الوجه
+        // 1. تحريك العناصر عبر سحب الجزمو
         if (m_is_dragging_gizmo && m_active_gizmo_axis != -1) {
             Vector3 cam_fwd = -m_camera->get_global_transform().basis.get_column(2).normalized();
             Vector3 ray_from = m_camera->project_ray_origin(drag->get_position());
@@ -307,17 +393,24 @@ void CarModeler::_unhandled_input(const Ref<InputEvent>& event) {
             Vector3 axis_dir = (m_active_gizmo_axis == 0 ? Vector3(1,0,0) : (m_active_gizmo_axis == 1 ? Vector3(0,1,0) : Vector3(0,0,1)));
             Vector3 move_vec = axis_dir * world_delta.dot(axis_dir);
 
-            std::set<VertId> unique_verts;
-            for (FaceId fid : m_selected_faces) {
-                if (fid < 0 || fid >= (int)m_bmesh.faces.size() || m_bmesh.faces[fid].deleted) continue;
-                LoopId cur = m_bmesh.faces[fid].l_first;
-                for (int i = 0; i < m_bmesh.faces[fid].len; ++i) {
-                    unique_verts.insert(m_bmesh.loops[cur].v);
-                    cur = m_bmesh.loops[cur].next;
+            std::set<VertId> active_verts;
+            if (m_mode == 0) active_verts = m_selected_verts;
+            else if (m_mode == 1) {
+                for (EdgeId eid : m_selected_edges) {
+                    active_verts.insert(m_bmesh.edges[eid].v1);
+                    active_verts.insert(m_bmesh.edges[eid].v2);
+                }
+            } else if (m_mode == 2) {
+                for (FaceId fid : m_selected_faces) {
+                    LoopId cur = m_bmesh.faces[fid].l_first;
+                    for (int i = 0; i < m_bmesh.faces[fid].len; ++i) {
+                        active_verts.insert(m_bmesh.loops[cur].v);
+                        cur = m_bmesh.loops[cur].next;
+                    }
                 }
             }
 
-            for (VertId vid : unique_verts) {
+            for (VertId vid : active_verts) {
                 m_bmesh.verts[vid].co += move_vec;
             }
 
@@ -372,16 +465,18 @@ void CarModeler::_on_btn_extrude_pressed() {
             m_selected_faces.insert(new_f);
             rebuild_render_mesh();
             update_gizmo();
-            if (m_lbl_status) m_lbl_status->set_text("⬆️ تم بثق الوجه");
+            if (m_lbl_status) m_lbl_status->set_text("⬆️ تم بثق الوجه بنجاح");
         }
     }
 }
 
 void CarModeler::_on_btn_delete_pressed() {
-    for (FaceId f : m_selected_faces) {
-        m_bmesh.faces[f].deleted = true;
-    }
+    for (FaceId f : m_selected_faces) m_bmesh.faces[f].deleted = true;
+    for (EdgeId e : m_selected_edges) m_bmesh.edges[e].deleted = true;
+    for (VertId v : m_selected_verts) m_bmesh.verts[v].deleted = true;
     m_selected_faces.clear();
+    m_selected_edges.clear();
+    m_selected_verts.clear();
     rebuild_render_mesh();
     update_gizmo();
 }
@@ -389,6 +484,7 @@ void CarModeler::_on_btn_delete_pressed() {
 void CarModeler::rebuild_render_mesh() {
     if (!m_car_mesh) return;
 
+    // 1. رسم مجسم الأوجه والشيدر
     Ref<SurfaceTool> st;
     st.instantiate();
     st->begin(Mesh::PRIMITIVE_TRIANGLES);
@@ -421,13 +517,4 @@ void CarModeler::rebuild_render_mesh() {
         } else {
             for (size_t j = 1; j < pts.size() - 1; ++j) {
                 st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(0, 0)); st->add_vertex(pts[0]);
-                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(1, 0)); st->add_vertex(pts[j]);
-                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(0.5, 1)); st->add_vertex(pts[j + 1]);
-            }
-        }
-    }
-
-    m_car_mesh->set_mesh(st->commit());
-}
-
-} // namespace godot
+                st->set_normal(f.normal); st->set_color(col); st->set_uv(Vector2(1, 0)); st->add_vert
