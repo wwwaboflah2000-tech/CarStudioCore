@@ -4,7 +4,7 @@ env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
 
 env.Append(CXXFLAGS=["-std=c++20", "-O3", "-fexceptions"])
 env.Append(CCFLAGS=["-O3", "-fexceptions"])
-env.Append(CPPPATH=["src/"])
+env.Append(CPPPATH=["#src/", "src/", "#"])
 
 sources = Glob("src/*.cpp")
 
