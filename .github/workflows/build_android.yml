@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  NDK_VERSION: "26.3.11579264"
+  NDK_VERSION: "r26d"
 
 jobs:
   build:
@@ -27,7 +27,7 @@ jobs:
         run: pip install scons
 
       - name: Setup Android NDK
-        uses: nvm-sh/setup-android@v1
+        uses: nttld/setup-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}
 
