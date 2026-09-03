@@ -25,14 +25,20 @@ jobs:
         run: pip install scons
 
       - name: Setup Android NDK
+        id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}
 
+      - name: Set NDK Environment Path
+        run: |
+          echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+
       - name: Fetch godot-cpp (Master for 4.8)
         run: |
           if [ ! -d "godot-cpp/src" ]; then
-            echo "📥 جاري استنساخ godot-cpp فرع master..."
+            echo "📥 جاري استنساخ godot-cpp..."
             git clone --depth 1 -b master https://github.com/godotengine/godot-cpp.git godot-cpp
           fi
 
@@ -44,18 +50,18 @@ jobs:
             godot-cpp/bin
             godot-cpp/gen
             godot-cpp/include/godot_cpp/gen
-          key: godot-cpp-android-arm64-v48-cache
+          key: godot-cpp-android-arm64-v48-r26d-cache
 
       - name: Build godot-cpp (Once)
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
         run: |
           cd godot-cpp
-          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 ANDROID_NDK_ROOT="${{ steps.setup-ndk.outputs.ndk-path }}" -j$(nproc)
           cd ..
 
       - name: Compile C++ Core
         run: |
-          scons platform=android target=template_debug arch=arm64 -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 ANDROID_NDK_ROOT="${{ steps.setup-ndk.outputs.ndk-path }}" -j$(nproc)
 
       - name: Upload Library
         uses: actions/upload-artifact@v4
