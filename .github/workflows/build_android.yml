@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  NDK_VERSION: "r26d"
+  NDK_VERSION: "r28b"
 
 jobs:
   build:
@@ -24,16 +24,21 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
-      - name: Setup Android NDK
+      - name: Setup Android NDK (r28b)
         id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: ${{ env.NDK_VERSION }}
+          link-to-sdk: true
 
-      - name: Set NDK Environment Path
+      - name: Link NDK to Exact Godot 4.8 Path
         run: |
-          echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          NDK_PATH="${{ steps.setup-ndk.outputs.ndk-path }}"
+          echo "NDK Path is: $NDK_PATH"
+          sudo mkdir -p /usr/local/lib/android/sdk/ndk
+          sudo ln -sfn "$NDK_PATH" /usr/local/lib/android/sdk/ndk/28.1.13356709
+          echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/28.1.13356709" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/28.1.13356709" >> $GITHUB_ENV
 
       - name: Fetch godot-cpp (Master for 4.8)
         run: |
@@ -50,18 +55,18 @@ jobs:
             godot-cpp/bin
             godot-cpp/gen
             godot-cpp/include/godot_cpp/gen
-          key: godot-cpp-android-arm64-v48-r26d-cache
+          key: godot-cpp-android-arm64-v48-r28b-cache
 
       - name: Build godot-cpp (Once)
         if: steps.cache-godot-cpp.outputs.cache-hit != 'true'
         run: |
           cd godot-cpp
-          scons platform=android target=template_debug arch=arm64 ANDROID_NDK_ROOT="${{ steps.setup-ndk.outputs.ndk-path }}" -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 -j$(nproc)
           cd ..
 
       - name: Compile C++ Core
         run: |
-          scons platform=android target=template_debug arch=arm64 ANDROID_NDK_ROOT="${{ steps.setup-ndk.outputs.ndk-path }}" -j$(nproc)
+          scons platform=android target=template_debug arch=arm64 -j$(nproc)
 
       - name: Upload Library
         uses: actions/upload-artifact@v4
